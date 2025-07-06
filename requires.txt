@@ -1,1 +1,1 @@
-express cookie-parser express-session dotenv connect-flash
+express cookie-parser express-session dotenv connect-flash mongoose bcrypt

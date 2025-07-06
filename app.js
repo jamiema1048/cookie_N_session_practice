@@ -5,6 +5,19 @@ const app = express();
 const cookieParser = require("cookie-parser");
 const session = require("express-session");
 const flash = require("connect-flash");
+const mongoose = require("mongoose");
+const Student = require("./models/student");
+const bcrypt = require("bcrypt");
+const saltRounds = 14;
+
+mongoose
+  .connect("mongodb://localhost:27017/exampleDB")
+  .then(() => {
+    console.log("Connected to MongoDB.....");
+  })
+  .catch((e) => {
+    console.log(e);
+  });
 
 app.use(cookieParser(process.env.MYCOOKIESECRETKEY));
 app.use(
@@ -15,61 +28,61 @@ app.use(
     cookie: { secure: false }, // localhost沒有https，secure:false才能使用session
   })
 );
-app.use(flash());
-
-const checkUser = (req, res, next) => {
-  if (!req.session.isVerified) {
-    return res.send("Login first^^");
-  } else {
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+const verifyUser = (req, res, next) => {
+  if (req.session.isVerified) {
     next();
+  } else {
+    return res.send("Login 1st^^");
   }
 };
 
-app.get("/", (req, res) => {
-  req.flash("message", "Welcome to web");
-  return res.send(req.flash("message") + "Home.......");
+app.get("/students", async (req, res) => {
+  let foundStudent = await Student.find({}).exec();
+  return res.send(foundStudent);
 });
 
-app.get("/setCookie", (req, res) => {
-  // res.cookie("urCookie", "Oreo");
-  res.cookie("urCookie", "Oreo", { signed: true });
-  return res.send("Cookie set.......");
+app.post("/students", async (req, res) => {
+  try {
+    let { username, password } = req.body;
+    let hashValue = await bcrypt.hash(password, saltRounds);
+    let newStudent = new Student({ username, password: hashValue });
+    let savedStudent = await newStudent.save();
+    return res.send({ message: "Saved student data", savedStudent });
+  } catch (e) {
+    return res.status(400).send(e);
+  }
 });
 
-app.get("/seeCookie", (req, res) => {
-  console.log(req.signedCookies);
-  return res.send("See the set Cookies " + req.signedCookies.urCookie);
+app.post("/students/login", async (req, res) => {
+  try {
+    let { username, password } = req.body;
+    let foundStudent = await Student.findOne({ username }).exec();
+    console.log(foundStudent);
+    if (!foundStudent) {
+      res.send("Wrong Username");
+    } else {
+      let result = await bcrypt.compare(password, foundStudent.password);
+      if (result) {
+        req.session.isVerified = true;
+        res.send("Login successfully.....");
+      } else {
+        res.send("Fail to login.....");
+      }
+    }
+  } catch (e) {
+    return res.status(400).send(e);
+  }
 });
 
-app.get("/setSessionData", (req, res) => {
-  console.log(req.session);
-  req.session.example = "Somethin' not important........";
-  return res.send(
-    "Setting data at server,setting signed session ID on browser"
-  );
-});
-
-app.get("/seeSessionData", (req, res) => {
-  console.log(req.session);
-  // connect.sid => session id
-  return res.send("See the set Session Data ");
-});
-
-app.get("/verifyUser", (req, res) => {
-  req.session.isVerified = true;
-  return res.send("Verified^^");
-});
-
-app.get("/logout", (req, res) => {
+app.post("/students/logout", async (req, res) => {
   req.session.isVerified = false;
   return res.send("U had logout^^");
 });
 
-app.get("/secret", checkUser, (req, res) => {
-  return res.send("U saw the secret^^");
-});
-app.get("/secret2", checkUser, (req, res) => {
-  return res.send("U saw another secret^^");
+app.get("/secret", verifyUser, (req, res) => {
+  return res.send("Thanx 4 U to notice this meaningless secret");
 });
 
 app.listen(3920, () => {
